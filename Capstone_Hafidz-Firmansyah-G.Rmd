@@ -1,0 +1,379 @@
+---
+title: "EDA on Indonesia's Produced Waste"
+author: "Hafidz Firmansyah Ghufara (hafidzfg@gmail.com)"
+updated: "3/27/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Intro
+
+Exploratory Data Analysis ini dilakukan sebagai submisi untuk capstone project Tetris FastTrack Data Analytics Program oleh DQLab.
+
+Sumber data: Kementerian Lingkungan Hidup dan Kehutanan (https://sipsn.menlhk.go.id/)
+
+```{r}
+#Load libraries
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(readxl)
+library(janitor)
+library(data.table)
+library(scales)
+```
+#Data Preparation
+```{r}
+#Load the data
+##remove 1st row as header starts on 2nd row
+data.capaian <- read_excel('./Data_Capaian_SIPSN_KLHK_19-20.xlsx',skip = 1, col_names = TRUE) %>% replace(is.na(.), 0)
+data.jenis <- read_excel('./Data_Komposisi_Jenis_Sampah_SIPSN_KLHK.xlsx',sheet = "Sheet2", col_names = TRUE) %>% replace(is.na(.), 0)
+data.sumber <- read_excel('./Data_Komposisi_Sumber_Sampah_SIPSN_KLHK_19-21.xlsx',skip = 1, col_names = TRUE) %>% replace(is.na(.), 0)
+data.timbulan <- read_excel('./Data_Timbulan_Sampah_SIPSN_KLHK.xlsx',skip = 1, col_names = TRUE) %>% replace(is.na(.), 0)
+```
+
+
+
+```{r}
+# Take a look at the data
+str(data.capaian)
+head(data.capaian)
+tail(data.capaian)
+colnames(data.capaian)
+
+
+str(data.jenis)
+head(data.jenis)
+tail(data.jenis)
+colnames(data.jenis)
+
+str(data.sumber)
+head(data.sumber)
+tail(data.sumber)
+colnames(data.sumber)
+
+str(data.timbulan)
+head(data.timbulan)
+tail(data.timbulan)
+colnames(data.timbulan)
+```
+
+```{r}
+##Clean column names
+df.capaian <- clean_names(data.capaian)
+
+colnames(df.capaian)
+
+df.jenis <- clean_names(data.jenis)
+df.sumber <- clean_names(data.sumber)
+df.timbulan <- clean_names(data.timbulan)
+```
+
+#Komposisi: Capaian Pengelolaan Sampah
+```{r}
+#Group data by Province
+tail(df.capaian)
+df.capaian2 <- group_by(df.capaian, provinsi, tahun) %>% 
+  summarize(timbulan_tahun = sum(timbulan_sampah_tahunan_ton_tahun_a),
+            pengurangan_tahun = sum(pengurangan_sampah_tahunan_ton_tahun_b),
+            penanganan_tahun = sum(penanganan_sampah_tahunan_ton_tahun_c),
+            terkelola_tahun = sum(sampah_terkelola_tahunan_ton_tahun_b_c),
+            daur_tahun = sum(daur_ulang_sampah_tahunan_ton_tahun_d),
+            ) %>%
+  as.data.frame %>%
+  arrange(tahun)
+
+head(df.capaian2)
+```
+
+```{r}
+#Filter by year and drop unused column
+capaian_2021 <- subset(df.capaian2, tahun=='2021', select = -c(terkelola_tahun))
+```
+
+
+Plot Capaian Pengelolaan Sampah per Provinsi
+
+```{r fig.width=25,fig.height=15}
+#make data into long
+df <- reshape2::melt(capaian_2021, id.vars=c("provinsi", "tahun"), variable.name="category", value.name="Ton")
+head(df)
+#make numbers show fully
+options(scipen=10000)
+
+#create barplot
+plot_capaian <- ggplot(df, aes(x=provinsi, y=Ton, fill=category)) +
+  geom_bar(position="dodge", stat="identity") +
+  labs(x="", y="Ton", title="Capaian Pengelolaan Sampah (2021)") +
+  theme_bw() + 
+  theme(legend.position="bottom", 
+        legend.title = element_blank(), 
+        axis.text.x = element_text(angle = 45,  hjust=1), 
+        plot.title = element_text(size=25), 
+        axis.title = element_text(size=20), 
+        axis.text = element_text(size=20), 
+        axis.title.y = element_text(vjust=3, size=20),
+        legend.text=element_text(size=20)) +
+  scale_color_hue(labels = c) +
+  scale_fill_discrete(labels = c(timbulan_tahun = "Timbulan sampah", pengurangan_tahun = "Pengurangan sampah", penanganan_tahun = "Penanganan sampah", daur_tahun = "Terdaur ulang")) +
+  scale_y_continuous(labels = scales::unit_format(unit = "Juta", scale = 1e-6, accuracy = 1))
+  
+plot_capaian
+```
+
+## Komposisi: Jenis Sampah
+
+```{r}
+head(data.jenis)
+df.jenis <- clean_names(data.jenis)
+head(df.jenis)
+
+##Group by provinsi dan tahun
+df.jenis2 <- group_by(df.jenis, provinsi, tahun) %>% 
+  summarize("Sisa Makanan" = sum(sisa_makanan),
+            "Kayu Ranting" = sum(kayu_ranting),
+            "Kertas Karton" = sum(kertas_karton),
+            Plastik = sum(plastik),
+            Logam = sum(logam),
+            Kain = sum(kain),
+            "Karet-Kulit" = sum(karet_kulit),
+            Kaca = sum(kaca),
+            Lainnya = sum(lainnya),
+            Total = sum(ton)
+            ) %>%
+  as.data.frame %>%
+  arrange(tahun)
+
+head(df.jenis2)
+tail(df.jenis2)
+```
+
+```{r}
+#Drop kolom yang tidak dipakai
+jenis_2021 <- subset(df.jenis2, tahun=='2021', -provinsi) 
+jenis_2021 <- subset(df.jenis2, tahun=='2021', -provinsi)  %>% aggregate(.~jenis_2021$tahun,.,sum)
+jenis_2021 <- subset(jenis_2021, select=-c(tahun))
+jenis_2021 <- jenis_2021 %>% rename(tahun = 'jenis_2021$tahun')
+
+head(jenis_2021)
+```
+
+```{r}
+#make data into long
+df2 <- reshape2::melt(jenis_2021, id.vars=c("tahun"), variable.name="Jenis", value.name="Ton")
+df2 <- df2[order(-df2$Ton),]
+df2 <- subset(df2, Jenis != 'Total')
+
+head(df2)
+tail(df2)
+str(df2)
+```
+
+
+
+```{r}
+#Plot Sampah berdasarkan jenisnya
+jenis_plot <- df2 %>% 
+  mutate(Jenis = fct_reorder(Jenis, Ton)) %>%
+  ggplot(df2, mapping = aes(x=Jenis, y=Ton, label=Ton)) +
+  geom_segment(
+    aes(x=Jenis, xend=Jenis, y=0, yend=Ton),
+    color=ifelse(df2$Jenis %in% c("Sisa Makanan"), "navy", "grey"), 
+    size=ifelse(df2$Jenis %in% c("Sisa Makanan"), 1.3, 0.7)) +
+  geom_point(
+    color=ifelse(df2$Jenis %in% c("Sisa Makanan"), "navy", "grey"), 
+    size=ifelse(df2$Jenis %in% c("Sisa Makanan"), 5, 2)) +
+  theme_bw() +
+  coord_flip() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  ggtitle("Komposisi Sampah berdasarkan jenis (2021)") +
+  scale_y_continuous(labels = scales::comma)
+
+jenis_plot + annotate("text", x=grep("Sisa Makanan", df2$Jenis), y=df$Ton[which(df2$Jenis=="Sisa Makanan")]*14, 
+           label="28.92% sampah \nberasal dari sisa makanan", 
+           color="navy", size=4 , angle=0, fontface="bold", hjust=-0, vjust=-7.5) +
+  scale_y_continuous(labels = scales::unit_format(unit = "Juta", scale = 1e-6, accuracy = 1))
+
+
+```
+
+##Komposisi: Sumber Sampah
+
+```{r}
+head(df.sumber)
+
+##Group data by tahun
+df.sumber2 <- group_by(df.sumber, tahun) %>%
+  summarise("Rumah Tangga" = sum(rumah_tangga_ton),
+            Perkantoran = sum(perkantoran_ton),
+            Pasar = sum(pasar_ton),
+            Perniagaan = sum(perniagaan_ton),
+            "Fasilitas Publik" = sum(fasilitas_publik_ton),
+            Kawasan = sum(kawasan_ton),
+            Lainnya = sum(lain_ton)
+            ) %>%
+  as.data.frame %>%
+  arrange(tahun)
+
+head(df.sumber2)
+tail(df.sumber2)
+```
+
+```{r}
+#Drop kolom yang tidak terpakai
+df3 <- subset(df.sumber2, tahun == 2021)
+df3 <-  reshape2::melt(df3, id.vars=c("tahun"), variable.name="Sumber", value.name="Ton")
+
+head(df3)
+```
+
+```{r}
+#Plot penghasil sampah
+plot_sumber <- df3 %>% 
+  mutate(Sumber = fct_reorder(Sumber, Ton)) %>%
+  ggplot(df3, mapping = aes(x=Sumber, y=Ton/sum(Ton))) + 
+  geom_bar(stat = "identity", fill="deepskyblue4", width=.5) +
+  coord_flip() +
+  theme_bw() +
+  labs(title= "Penyumbang Sampah di Indonesia (2021)", y="Persentase", x="") +
+  scale_y_continuous(labels = label_percent(accuracy=1) )
+
+plot_sumber
+ggplotly(plot_sumber)
+```
+
+
+#Target Pengurangan Sampah
+```{r}
+head(df.capaian2)
+
+#Group data pengurangan sampah by tahun
+capaian_tahunan <- group_by(df.capaian2, tahun) %>% 
+  summarize(timbulan_tahun = sum(timbulan_tahun),
+            pengurangan_tahun = sum(pengurangan_tahun),
+            penanganan_tahun = sum(penanganan_tahun),
+            daur_tahun = sum(daur_tahun)
+            ) %>%
+  as.data.frame %>%
+  arrange(tahun)
+
+head(capaian_tahunan)
+
+persen_capaian <- capaian_tahunan %>% 
+  summarize(tahun = tahun,
+            "Pengurangan Sampah" = pengurangan_tahun/timbulan_tahun,
+            "Penanganan Sampah" = penanganan_tahun/timbulan_tahun,
+            "Sampah Terdaur Ulang" =daur_tahun/timbulan_tahun) %>%
+  as.data.frame %>%
+  arrange(capaian_tahunan$tahun)
+head(persen_capaian)
+
+```
+
+```{r}
+#convert table to long
+df4 <-  reshape2::melt(persen_capaian, id.vars=c("tahun"), variable.name="Capaian", value.name="Persentase")
+
+head(df4)
+str(df4)
+levels(df4$Capaian)
+#change factor level untuk mengubah urutan kolom
+df4$Capaian <- factor(df4$Capaian, levels = c("Penanganan Sampah", "Pengurangan Sampah", "Sampah Terdaur Ulang"))
+```
+
+
+```{r fig.width=15}
+#Plot persentase capaian dari tahun ke tahun
+plot_persen <- df4 %>%
+  ggplot(df4, mapping=aes(x=tahun, y=Persentase, fill=Capaian)) +
+  geom_bar(position="dodge", stat="identity") +
+  labs(x="", y="Persentase", title="Persentase capaian pengelolaan sampah") +
+  theme_bw() + 
+  theme(legend.position="bottom", 
+        legend.title = element_blank(), 
+        axis.text.x = element_text(hjust=1), 
+        plot.title = element_text(size=20), 
+        axis.title = element_text(size=15), 
+        axis.text = element_text(size=15), 
+        axis.title.y = element_text(vjust=2, size=15),
+        legend.text=element_text(size=15)) +
+  scale_color_hue(labels = c) +
+  geom_text(aes( label = scales::percent(Persentase),
+                   y= Persentase), vjust=1.25, color="white",
+            position = position_dodge(0.9), size=5.5) +
+  scale_y_continuous(labels = percent_format(accuracy=1)) +
+  annotate("segment", x = 2020.5, xend = 2021.5, y = 0.24, yend = 0.24,
+  colour = "darkgreen") +
+  annotate("segment", x = 2019.5, xend = 2020.5, y = 0.22, yend = 0.22,
+  colour = "darkgreen") +
+  annotate("segment", x = 2018.5, xend = 2019.5, y = 0.2, yend = 0.2,
+  colour = "darkgreen") +
+  annotate("segment", x = 2020.5, xend = 2020.5, y = 0.22, yend = 0.24,
+  colour = "darkgreen") +
+  annotate("segment", x = 2019.5, xend = 2019.5, y = 0.20, yend = 0.22,
+  colour = "darkgreen") +
+  annotate("text", x = 2021.25, y = 0.27, label = "Target Pengurangan Sampah", size = 5, colour="darkgreen") +
+  annotate("segment", x = 2020.5, xend = 2021.5, y = 0.74, yend = 0.74,
+  colour = "darkred") +
+  annotate("segment", x = 2019.5, xend = 2020.5, y = 0.75, yend = 0.75,
+  colour = "darkred") +
+  annotate("segment", x = 2018.5, xend = 2019.5, y = 0.8, yend = 0.8,
+  colour = "darkred") +
+  annotate("segment", x = 2020.5, xend = 2020.5, y = 0.75, yend = 0.74,
+  colour = "darkred") +
+  annotate("segment", x = 2019.5, xend = 2019.5, y = 0.8, yend = 0.75,
+  colour = "darkred") +
+  annotate("text", x = 2021.25, y = 0.78, label = "Target Penanganan Sampah", size = 5, colour="darkred")
+
+
+plot_persen
+```
+
+##Data Timbulan Sampah
+```{r}
+head(data.timbulan)
+tail(data.timbulan)
+str(data.timbulan)
+typeof(data.timbulan$"Timbulan Sampah Tahunan(ton)")
+df.timbulan <- clean_names(data.timbulan)
+str(df.timbulan)
+
+##Aggregate berdasarkan tahun
+df.timbulan <- group_by(df.timbulan, tahun) %>%
+  summarise(Timbulan = sum(timbulan_sampah_tahunan_ton)
+            ) %>%
+  as.data.frame %>%
+  arrange(tahun)
+
+head(df.timbulan)
+```
+
+```{r}
+#Buat data menjadi long
+df5 <-  reshape2::melt(df.timbulan, id.vars=c("tahun"), variable.name="y", value.name="Timbulan")
+head(df5)
+str(df5)
+
+
+#Plot timbulan sampah 2019-2021
+plot_timbulan <- df5 %>%
+  ggplot(df4, mapping=aes(x=as.factor(tahun), y=Timbulan, label=sprintf("%0.2f", round(Timbulan/1000000, digits=2)), "Juta")) +
+  geom_bar(stat = "identity", fill="dodgerblue4", width=.5) +
+  labs(x="", y="Ton", title="Timbulan Sampah (Juta Ton)") +
+  theme_bw() +
+  scale_y_continuous(labels = scales::unit_format(unit = "Juta", scale = 1e-6, accuracy = 1)) +
+  geom_text(size = 4, hjust = 0.5, vjust=1.5, color="white")
+  # geom_text(aes(label=Timbulan, vjust=-0.25))
+  # geom_text(aes(label = scales::unit_format(scale = 1e-6, accuracy = 1),
+  #                  y= Timbulan), vjust=1.25, color="white", size=5.5)
+
+plot_timbulan
+```
+
